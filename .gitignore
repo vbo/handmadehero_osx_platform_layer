@@ -1,0 +1,3 @@
+/code/*
+!/code/osx_build.sh
+!/code/osx_handmade.m

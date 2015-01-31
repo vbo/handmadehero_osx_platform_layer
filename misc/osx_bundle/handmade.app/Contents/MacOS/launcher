@@ -1,0 +1,5 @@
+#!/bin/bash
+
+pushd "`dirname "$0"`" > /dev/null
+./build/osx_handmade.out
+popd > /dev/null
