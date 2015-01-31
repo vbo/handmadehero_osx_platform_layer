@@ -470,7 +470,7 @@ static inline void cocoaProcessKeyUpDown(game_button_state *state, int isDown) {
 }
 
 // Flushes event queue, handling most of the events in place.
-// This should should be called every frame or our window become unresponsive!
+// This should be called every frame or our window become unresponsive!
 // TODO: For some reason the whole thing hangs on window resize events: investigate.
 void cocoaFlushEvents(
     NSApplication *application,
@@ -478,7 +478,7 @@ void cocoaFlushEvents(
     OSXInputPlaybackState *playback
 ) {
     NSAutoreleasePool *eventsAutoreleasePool = [[NSAutoreleasePool alloc] init];
-    while(true) {
+    while (true) {
         NSEvent* event =
             [application nextEventMatchingMask: NSAnyEventMask
                          untilDate: [NSDate distantPast]
@@ -649,8 +649,6 @@ static NSWindow *cocoaCreateWindowAndMenu(
 // TODO: I've tested this only with PS3 controller!
 // Obviously there should be some controller specific nuances here
 // and we need to decide how to handle this properly.
-// TODO: Looks like we are leaking a bit of memory here.
-// Recheck if we supposed to be freeing something.
 // TODO: Recheck deadzone handling.
 
 static const game_input emptyGameInput;
@@ -761,7 +759,7 @@ void iokitControllerUnplugCallbackImpl(void* context, IOReturn result, void* sen
     IOHIDDeviceClose(device, kIOHIDOptionsTypeNone);
 }
 
-void iokitControllerPluinCallbackImpl(
+void iokitControllerPluginCallbackImpl(
     void* context, IOReturn result,
     void* sender, IOHIDDeviceRef device
 ) {
@@ -794,7 +792,7 @@ void iokitControllerPluinCallbackImpl(
 }
 
 // Utility function to prepare input for IOHIDManager.
-// Creates a CoreFoundation dictionary like this:
+// Creates a CoreFoundation-style dictionary like this:
 //   kIOHIDDeviceUsagePageKey => usagePage
 //   kIOHIDDeviceUsageKey => usageValue
 static CFMutableDictionaryRef iokitCreateDeviceMatchingDict(
@@ -836,7 +834,7 @@ static void iokitInit(game_input *input) {
     IOHIDManagerSetDeviceMatchingMultiple(hidManager, deviceMatching);
     CFRelease(deviceMatching);
     IOHIDManagerRegisterDeviceMatchingCallback(
-        hidManager, iokitControllerPluinCallbackImpl, input);
+        hidManager, iokitControllerPluginCallbackImpl, input);
     IOHIDManagerScheduleWithRunLoop(
         hidManager, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
 }
@@ -846,13 +844,13 @@ static void iokitInit(game_input *input) {
 
 #import <OpenGL/gl.h>
 
-// We use OpenGL here to draw the results of game
+// I am using OpenGL here to draw the results of game
 // rendering to the screen. The main idea is to allocate
 // texture of the size of the game drawing surface and
 // update this texture data with actual bitmap drawn by the game
 // on each main loop iteration.
 
-// To actually draw this texture to the screen we simply map
+// To actually draw this texture to the screen I am simply mapping
 // it to the full-viewport quad using OpenGL fixed-function API.
 
 typedef struct {
@@ -892,15 +890,14 @@ NSOpenGLContext *openglCreateContext(NSWindow *window) {
         return 0;
     }
     // We have only one context so just make it current here
-    // and don't think about it to much
+    // and don't think about it to much.
     [openglContext makeCurrentContext];
-    // Enable vsync?
-    // We actually have our own synchronization sleep
+    // Enable vSync.
     GLint vsync = 1;
     [openglContext setValues: &vsync
                    forParameter: NSOpenGLCPSwapInterval];
     // Substitute window's default contentView with OpenGL view
-    // and configure them both to use newly created OpenGL context
+    // and configure it to use our newly created OpenGL context.
     NSOpenGLView *view = [[NSOpenGLView alloc] init];
     [view setWantsBestResolutionOpenGLSurface: YES];
     [window setContentView: view];
@@ -956,7 +953,7 @@ void openglUpdateFramebufferAndFlush(OpenglState *state, void *framebufferMemory
         glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f,  1.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f,  1.0f);
     } glEnd();
-    // Swap OpenGL buffers. With VSYNC enabled this
+    // Swap OpenGL buffers. With vSync enabled this
     // will always block us until refresh boundary.
     [state->context flushBuffer];
 }
@@ -1112,7 +1109,6 @@ int main() {
         gameMemory.PermanentStorage = globalApplicationState.gameMemoryBlock;
         gameMemory.TransientStorage = (
             (uint8_t *)gameMemory.PermanentStorage + gameMemory.PermanentStorageSize);
-
 #if HANDMADE_INTERNAL
         gameMemory.DEBUGPlatformFreeFileMemory = osxDEBUGFreeFileMemory;
         gameMemory.DEBUGPlatformReadEntireFile = osxDEBUGReadEntireFile;
@@ -1145,7 +1141,7 @@ int main() {
         soundOutputState.isValid = false;
         soundOutputState.samplesPerSecond = soundSamplesPerSecond;
         soundOutputState.playCursor = 0;
-        // Intoruduce some safe latency.
+        // Introduce some safe initial latency.
         soundOutputState.writeCursor = 20.0/1000.0 * soundSamplesPerSecond;
         soundOutputState.bufferSizeInSamples = bufferSizeInSamples;
         soundOutputState.buffer = osxMemoryAllocate(0, soundBufferSizeInBytes);
@@ -1158,7 +1154,7 @@ int main() {
         gameSoundBuffer.SampleCount = 0;
         gameSoundBuffer.Samples = osxMemoryAllocate(0, soundBufferSizeInBytes); 
     }
-    // Init thread context.
+    // Initialize thread context.
     thread_context threadContext = {0};
     // Initialize app, window and drawing stuff.
     NSApplication *application = cocoaInitApplication();
@@ -1191,14 +1187,12 @@ int main() {
         if (!globalApplicationState.onPause) {
             if (!loopsToSkip) {
                 input.dtForFrame = timeDelta;
-
                 if (inputPlayback.recordIndex) {
                     osxRecordInput(&inputPlayback, &input);
                 }
                 if (inputPlayback.playIndex) {
                     osxPlayInput(&inputPlayback, &input);
                 }
-
                 game.updateAndRender(
                     &threadContext, &gameMemory, &input, &framebuffer);
                 // TODO: improve audio synchronization
@@ -1221,8 +1215,8 @@ int main() {
             }
         }
         // Sleep until the frame boundary.
-        // This allow us to use whatever target framerate we want
-        // and be independent of VSYNC
+        // This allows us to use whatever target framerate we want
+        // and be independent of vSync.
         // TODO: improve sleep timing
         while (true) {
             timeNow = osxHRTime();
