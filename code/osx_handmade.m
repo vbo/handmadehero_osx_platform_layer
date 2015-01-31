@@ -40,7 +40,7 @@ static struct {
     char *exeFileName;
     char *exeFilePathEndPointer;
     void *gameMemoryBlock;
-    uint32_t gameMemoryBlockSize;
+    uint64_t gameMemoryBlockSize;
 } globalApplicationState;
 
 // Utility Functions
@@ -80,7 +80,7 @@ static double hrtimeCoeff; // From mach units to seconds
 
 // This should be called once before using any timing functions!
 // Check out Apple's "Technical Q&A QA1398 Mach Absolute Time Units"
-// for official recomendations.
+// for official recommmendations.
 static void osxInitHrtime() {
     hrtimeStart = mach_absolute_time();
     mach_timebase_info_data_t timeBase;
@@ -95,7 +95,6 @@ static void osxInitHrtime() {
 static double osxHRTime() {
    return (mach_absolute_time() - hrtimeStart) * hrtimeCoeff; 
 }
-
 
 // Utility File/Path functions
 // ===========================
@@ -124,7 +123,6 @@ static int osxGetFileLastWriteTime(char *fileName) {
     }
     return t;
 }
-
 
 // Debug File I/O
 // ==============
@@ -247,7 +245,6 @@ static void osxUnloadGameCode(OSXGameCode *code) {
     code->updateAndRender = 0;
     code->getSoundSamples = 0;
 }
-
 
 // Memory
 // ======
