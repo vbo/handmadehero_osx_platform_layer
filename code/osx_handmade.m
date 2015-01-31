@@ -4,11 +4,12 @@
 
 #include "handmade_platform.h" // Pre-order game to get this file!
 
-// After you've got the source code of the game handmadehero.org
+// After you've got the source code of the game from handmadehero.org
 // you can merge the original code with this code and build
-// everything using `./code/osx_build.sh`.
+// everything using `./code/osx_build.sh` script.
 
-// This version was tested with day 29 sources of the game.
+// This version of platform layer was tested with
+// day 29-32 versions of the game source.
  
 // I am compiling the game code in C++ mode but
 // this platform layer code gets compiled in Objective-C mode
