@@ -634,6 +634,7 @@ static NSWindow *cocoaCreateWindowAndMenu(
 // ======================
 
 #include <IOKit/hid/IOHIDLib.h>
+#include <Kernel/IOKit/hidsystem/IOHIDUsageTables.h>
 
 // I am using IOKit IOHID API to handle gamepad input.
 // The main idea is to use IOHIDManager API to subscribe for
@@ -671,10 +672,10 @@ void iokitControllerValueChangeCallbackImpl(
     CFIndex value = IOHIDValueGetIntegerValue(valueRef);
     // Parsing usagePage/usage/value according to USB HID Usage Tables spec.
     switch (usagePage) {
-        case 0x01: { // sticks
+        case kHIDPage_GenericDesktop: { // Sticks handling.
             float valueNormalized;
             int inDeadZone = false;
-            int deadZoneMin = 126;
+            int deadZoneMin = 120;
             int deadZoneMax = 133;
             int center = 128;
             if (value > deadZoneMin && value < deadZoneMax) {
@@ -688,13 +689,13 @@ void iokitControllerValueChangeCallbackImpl(
                 }
             }
             switch (usage) {
-                case 0x30: { // X
+                case kHIDUsage_GD_X: {
                     if (!inDeadZone) {
                         controller->IsAnalog = true;
                     }
                     controller->StickAverageX = valueNormalized;
                 } break;
-                case 0x31: { // Y
+                case kHIDUsage_GD_Y: {
                     if (!inDeadZone) {
                         controller->IsAnalog = true;
                     }
@@ -702,7 +703,7 @@ void iokitControllerValueChangeCallbackImpl(
                 } break;
             }
         } break;
-        case 0x09: { // buttons
+        case kHIDPage_Button: {
             int isDown = (value != 0);
             switch (usage) {
                 case 1: { // Select
