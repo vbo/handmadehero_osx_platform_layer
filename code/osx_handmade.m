@@ -116,11 +116,11 @@ static void osxExeRelToAbsoluteFilename(
 // stat() function is actually part of POSIX API, nothing OS X specific here.
 // TODO: maybe use NSFileManager instead? Which is better?
 static int osxGetFileLastWriteTime(char *fileName) {
-	int t = 0;
-	struct stat fileStat;
-	if (stat(fileName, &fileStat) == 0) {
-		t = fileStat.st_mtimespec.tv_sec;
-	} else {
+    int t = 0;
+    struct stat fileStat;
+    if (stat(fileName, &fileStat) == 0) {
+        t = fileStat.st_mtimespec.tv_sec;
+    } else {
         // TODO: Diagnostic
     }
     return t;
@@ -144,9 +144,9 @@ DEBUG_PLATFORM_FREE_FILE_MEMORY(osxDEBUGFreeFileMemory);
 void osxDEBUGFreeFileMemory(
     thread_context *thread, void *memory
 ) {
-	if (memory) {
-		free(memory);
-	}
+    if (memory) {
+        free(memory);
+    }
 }
 
 // TODO: Add some error checking.
@@ -154,7 +154,7 @@ DEBUG_PLATFORM_READ_ENTIRE_FILE(osxDEBUGReadEntireFile);
 debug_read_file_result osxDEBUGReadEntireFile(
     thread_context *thread, char *fileName
 ) {
-	int fileHandle = open(fileName, O_RDONLY);
+    int fileHandle = open(fileName, O_RDONLY);
     struct stat fileStat;
     fstat(fileHandle, &fileStat);
     debug_read_file_result result = {0};
@@ -162,7 +162,7 @@ debug_read_file_result osxDEBUGReadEntireFile(
     result.Contents = malloc(size);
     read(fileHandle, result.Contents, size);
     close(fileHandle);
-	return result;
+    return result;
 }
 
 // TODO: Add some error checking.
@@ -172,10 +172,10 @@ bool32 osxDEBUGWriteEntireFile(
     uint32 memorySize, void *memory
 ) {
     // TODO: What access perms we should use here?
-	int fileHandle = open(fileName, O_WRONLY | O_CREAT, 0777);
+    int fileHandle = open(fileName, O_WRONLY | O_CREAT, 0777);
     ssize_t writtenSize = write(fileHandle, memory, memorySize);
     close(fileHandle);
-	return writtenSize == memorySize;
+    return writtenSize == memorySize;
 }
 
 #endif // HANDMADE_INTERNAL
@@ -314,9 +314,10 @@ static void osxBeginRecordingInput(OSXInputPlaybackState *state, uint32_t index)
     char fileName[100];
     osxGetInputFileLocation(index, fileName);
     state->recordFileHandle = open(fileName, O_WRONLY | O_CREAT | O_TRUNC, 0777);
-    osxMemoryCopy(replayBuffer->memory,
-           globalApplicationState.gameMemoryBlock,
-           globalApplicationState.gameMemoryBlockSize);
+    osxMemoryCopy(
+        replayBuffer->memory,
+        globalApplicationState.gameMemoryBlock,
+        globalApplicationState.gameMemoryBlockSize);
 }
 
 static void osxEndRecordingInput(OSXInputPlaybackState *state) {
@@ -330,9 +331,10 @@ static void osxBeginPlaybackInput(OSXInputPlaybackState *state, uint32_t index) 
     char fileName[100];
     osxGetInputFileLocation(index, fileName);
     state->playFileHandle = open(fileName, O_RDONLY);
-    osxMemoryCopy(globalApplicationState.gameMemoryBlock,
-           replayBuffer->memory,
-           globalApplicationState.gameMemoryBlockSize);
+    osxMemoryCopy(
+        globalApplicationState.gameMemoryBlock,
+        replayBuffer->memory,
+        globalApplicationState.gameMemoryBlockSize);
 }
 
 static void osxEndPlaybackInput(OSXInputPlaybackState *state) {
@@ -665,11 +667,11 @@ void iokitControllerValueChangeCallbackImpl(
         return;
     }
     IOHIDElementRef element = IOHIDValueGetElement(valueRef);
-	if (CFGetTypeID(element) != IOHIDElementGetTypeID()) {
+    if (CFGetTypeID(element) != IOHIDElementGetTypeID()) {
         return;
     }
     int usagePage = IOHIDElementGetUsagePage(element);
-	int usage = IOHIDElementGetUsage(element);
+    int usage = IOHIDElementGetUsage(element);
     CFIndex value = IOHIDValueGetIntegerValue(valueRef);
     // Parsing usagePage/usage/value according to USB HID Usage Tables spec.
     switch (usagePage) {
@@ -680,13 +682,13 @@ void iokitControllerValueChangeCallbackImpl(
             int deadZoneMax = 133;
             int center = 128;
             if (value > deadZoneMin && value < deadZoneMax) {
-               valueNormalized = 0;
-               inDeadZone = true;
+                valueNormalized = 0;
+                inDeadZone = true;
             } else {
                 if (value > center) {
-                   valueNormalized = (float)(value - center + 1) / (float)center;
+                    valueNormalized = (float)(value - center + 1) / (float)center;
                 } else {
-                   valueNormalized = (float)(value - center) / (float)center;
+                    valueNormalized = (float)(value - center) / (float)center;
                 }
             }
             switch (usage) {
@@ -1001,7 +1003,7 @@ OSStatus audioRenderCallbackImpl(
     const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber,
     UInt32 inNumberFrames, AudioBufferList* ioData
 ) {
-	CoreAudioOutputState *state = (CoreAudioOutputState *)inRefCon;
+    CoreAudioOutputState *state = (CoreAudioOutputState *)inRefCon;
     int addWriteCursor = inNumberFrames;
     uint32_t newWriteCursor = state->writeCursor + inNumberFrames;
     if (newWriteCursor >= state->bufferSizeInSamples) {
@@ -1011,23 +1013,22 @@ OSStatus audioRenderCallbackImpl(
     AudioUnitSampleType *leftSamples = ioData->mBuffers[0].mData;
     AudioUnitSampleType *rightSamples = ioData->mBuffers[1].mData;
     for (int i = 0; i < inNumberFrames; ++i) {
-		leftSamples[i] = (float)state->buffer[state->playCursor*2] / 32768.0;
-		rightSamples[i] = (float)state->buffer[state->playCursor*2 + 1] / 32768.0;
+        leftSamples[i] = (float)state->buffer[state->playCursor*2] / 32768.0;
+        rightSamples[i] = (float)state->buffer[state->playCursor*2 + 1] / 32768.0;
         int addPlayCursor = 1;
         uint32_t newPlayCursor = state->playCursor + addPlayCursor;
         if (newPlayCursor == state->bufferSizeInSamples) {
             addPlayCursor = addPlayCursor - state->bufferSizeInSamples;
         }
         OSAtomicAdd32(addPlayCursor, (int32_t *)&state->playCursor);
-	}
-	return noErr;
+    }
+    return noErr;
 }
 
 AudioUnit coreAudioCreateOutputUnit(CoreAudioOutputState *state) {
     AudioUnit outputUnit;
     // Find default AudioComponent.
-    AudioComponent outputComponent;
-    {
+    AudioComponent outputComponent; {
         AudioComponentDescription description = {
             kAudioUnitType_Output,
             kAudioUnitSubType_DefaultOutput,
