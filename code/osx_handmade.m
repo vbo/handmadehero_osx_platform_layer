@@ -2,14 +2,14 @@
 // You need to download original game code from handmadehero.org
 // to be able to compile and launch the whole thing.
 
-#include "handmade_platform.h" // Pre-order game to get this file!
+#include "handmade_platform.h" // Pre-order the game to get this file!
 
 // After you've got the source code of the game from handmadehero.org
 // you can merge the original code with this code and build
 // everything using `./code/osx_build.sh` script.
 
-// This version of platform layer was tested with
-// day 29-32 versions of the game source.
+// This version of platform layer is expected to work with
+// day 29 or later version of the game source.
  
 // I am compiling the game code in C++ mode but
 // this platform layer code gets compiled in Objective-C mode
@@ -26,6 +26,7 @@
 
 #define DEBUG_TURN_OVERLAY_ON_UNFOCUS 0
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
+#undef internal
 
 static const int framebufferWidth = 1920/2;
 static const int framebufferHeight = 1080/2;

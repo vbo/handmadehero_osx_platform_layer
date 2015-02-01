@@ -5,7 +5,7 @@ clang++ \
     ./code/handmade.cpp \
     -g \
     -Wall -Werror -Wfatal-errors -pedantic \
-    -Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-unused-function \
+    -Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-c++11-compat-deprecated-writable-strings -Wno-unused-variable -Wno-unused-function -Wno-missing-braces \
     -DHANDMADE_INTERNAL=1 \
     -std=c++11 -stdlib=libc++ \
     -dynamiclib -o ../build/handmade.dylib
