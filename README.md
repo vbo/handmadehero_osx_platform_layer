@@ -45,3 +45,7 @@ There are several TODOs in code, but for me this platform layer works like a cha
  - Merge platform layer files with unzipped source (in Finder just copy directories over and click "merge")
  - Use ./code/osx_build.sh to build and ../build/osx_handmade.out to launch the game
  - If there are some minor bugs - just fix them =)
+ 
+## Other versions
+
+There are several other versions of OS X plaform layer somewhere on github. I've tried only [this one](https://github.com/itfrombit/osx_handmade) by Jeff Buck and highly recommend it.
