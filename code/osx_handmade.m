@@ -636,7 +636,7 @@ void cocoaProcessEvents(
                     } break;
                     default: {
                         // Uncomment to learn your keys:
-                        NSLog(@"Unhandled key: %d", [event keyCode]);
+                        //NSLog(@"Unhandled key: %d", [event keyCode]);
                     } break;
                 }
             } break;
@@ -661,17 +661,13 @@ static NSWindow *cocoaCreateWindowAndMenu(
     int windowStyleMask;
     NSRect windowRect;
     windowRect = NSMakeRect(0, 0, width, height);
-    windowStyleMask = NSClosableWindowMask
-                    | NSMiniaturizableWindowMask
-                    | NSTitledWindowMask
-                    | NSResizableWindowMask;
+    windowStyleMask = NSClosableWindowMask;
     NSWindow *window =
         [[NSWindow alloc] initWithContentRect: windowRect
                           styleMask: windowStyleMask
                           backing: NSBackingStoreBuffered
                           defer: YES];
     [window setOpaque: YES];
-    [window center];
     WindowDelegate *windowDelegate = [[WindowDelegate alloc] init];
     [window setDelegate: windowDelegate];
     id appName = @"Handmade Hero";
