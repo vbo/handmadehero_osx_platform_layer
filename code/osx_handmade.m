@@ -685,7 +685,7 @@ static NSWindow *cocoaCreateWindowAndMenu(
 
 static const game_input emptyGameInput;
 
-void iokitControllerValueChangeCallbackImpl(
+static void iokitControllerValueChangeCallbackImpl(
     void *context, IOReturn result,
     void *sender, IOHIDValueRef valueRef
 ) {
@@ -780,7 +780,7 @@ void iokitControllerValueChangeCallbackImpl(
     CFRelease(valueRef);
 }
 
-void iokitControllerUnplugCallbackImpl(void* context, IOReturn result, void* sender) {
+static void iokitControllerUnplugCallbackImpl(void* context, IOReturn result, void* sender) {
     game_controller_input *controller = (game_controller_input *)context;
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
     controller->IsConnected = false;
@@ -791,7 +791,7 @@ void iokitControllerUnplugCallbackImpl(void* context, IOReturn result, void* sen
     IOHIDDeviceClose(device, kIOHIDOptionsTypeNone);
 }
 
-void iokitControllerPluginCallbackImpl(
+static void iokitControllerPluginCallbackImpl(
     void* context, IOReturn result,
     void* sender, IOHIDDeviceRef device
 ) {
@@ -893,7 +893,7 @@ typedef struct {
 } OpenglState;
 
 // Creates OpenGL context and initializes a drawing surface.
-NSOpenGLContext *openglCreateContext(NSWindow *window) {
+static NSOpenGLContext *openglCreateContext(NSWindow *window) {
     NSOpenGLContext *openglContext;
     NSOpenGLPixelFormatAttribute attributes[10];
     int unsigned attrCount = 0;
@@ -939,7 +939,7 @@ NSOpenGLContext *openglCreateContext(NSWindow *window) {
     return openglContext;
 }
 
-void openglInitState(
+static void openglInitState(
     OpenglState *state,
     NSWindow *window,
     int framebufferWidth,
@@ -971,7 +971,7 @@ void openglInitState(
         0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
 }
 
-void openglUpdateFramebufferAndFlush(OpenglState *state, void *framebufferMemory) {
+static void openglUpdateFramebufferAndFlush(OpenglState *state, void *framebufferMemory) {
     glClear(GL_COLOR_BUFFER_BIT);
     // Upload new video frame to the GPU.
     glTexSubImage2D(
@@ -1025,7 +1025,7 @@ typedef struct
 
 #include "libkern/OSAtomic.h"
 
-OSStatus audioRenderCallbackImpl(
+static OSStatus audioRenderCallbackImpl(
     void* inRefCon, AudioUnitRenderActionFlags* ioActionFlags,
     const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber,
     UInt32 inNumberFrames, AudioBufferList* ioData
@@ -1052,7 +1052,7 @@ OSStatus audioRenderCallbackImpl(
     return noErr;
 }
 
-AudioUnit coreAudioCreateOutputUnit(CoreAudioOutputState *state) {
+static AudioUnit coreAudioCreateOutputUnit(CoreAudioOutputState *state) {
     AudioUnit outputUnit;
     // Find default AudioComponent.
     AudioComponent outputComponent; {
@@ -1092,7 +1092,7 @@ AudioUnit coreAudioCreateOutputUnit(CoreAudioOutputState *state) {
     return outputUnit;
 }
 
-void coreAudioCopySamplesToRingBuffer(
+static void coreAudioCopySamplesToRingBuffer(
     CoreAudioOutputState *state,
     game_sound_output_buffer *source,
     int samplesCount
