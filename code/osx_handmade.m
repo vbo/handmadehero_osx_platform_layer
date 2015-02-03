@@ -25,6 +25,8 @@
 // ==============================
 
 #define DEBUG_TURN_OVERLAY_ON_UNFOCUS 0
+#define DEBUG_OVERLAY_OPACITY 0.5
+#define LAUNCH_FULLSCREEN 0
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #undef internal
 
@@ -487,7 +489,7 @@ static NSApplication *cocoaInitApplication() {
 #if DEBUG_TURN_OVERLAY_ON_UNFOCUS
         NSWindow *window = [notification object];
         [window setLevel: NSMainMenuWindowLevel];
-        [window setAlphaValue: 0.3];
+        [window setAlphaValue: DEBUG_OVERLAY_OPACITY];
         [window setIgnoresMouseEvents: YES];
 #endif
     }
@@ -500,11 +502,37 @@ static inline void cocoaProcessKeyUpDown(game_button_state *state, int isDown) {
     }
 }
 
+static inline void cocoaSetWindowFullscreen(NSWindow *window, bool32 value) {
+    int windowStyleMask;
+    if (value) {
+        [window setStyleMask: NSBorderlessWindowMask];
+        [window setLevel: NSMainMenuWindowLevel + 1];
+        [window setHidesOnDeactivate: YES];
+        NSRect screenRect = [[NSScreen mainScreen] frame];
+        [window setContentSize: screenRect.size];
+        [window setFrameOrigin: screenRect.origin];
+    } else {
+        [window setLevel: NSNormalWindowLevel];
+        [window setStyleMask: NSClosableWindowMask
+                            | NSMiniaturizableWindowMask
+                            | NSTitledWindowMask
+                            | NSResizableWindowMask];
+        [window setHidesOnDeactivate: NO];
+        [window setContentSize: NSMakeSize(initialWindowWidth, initialWindowHeight)];
+        [window center];
+    }
+}
+
+static inline bool32 cocoaIsWindowFullscreen(NSWindow *window) {
+    return [window styleMask] == NSBorderlessWindowMask;
+}
+
 // Flushes event queue, handling most of the events in place.
 // This should be called every frame or our window become unresponsive!
 // TODO: For some reason the whole thing hangs on window resize events: investigate.
-void cocoaFlushEvents(
+void cocoaProcessEvents(
     NSApplication *application,
+    NSWindow *window,
     game_controller_input *keyboardController,
     OSXInputPlaybackState *playback
 ) {
@@ -581,6 +609,12 @@ void cocoaFlushEvents(
                         cocoaProcessKeyUpDown(
                             &keyboardController->Back, isDown);
                     } break;
+                    case 122: { // F1
+                        if (isDown) {
+                            bool32 wasFullscreen = cocoaIsWindowFullscreen(window);
+                            cocoaSetWindowFullscreen(window, !wasFullscreen);
+                        }
+                    } break;
                     case 35: { // P
                         if (isDown) {
                             globalApplicationState.onPause = !globalApplicationState.onPause;
@@ -602,7 +636,7 @@ void cocoaFlushEvents(
                     } break;
                     default: {
                         // Uncomment to learn your keys:
-                        //NSLog(@"Unhandled key: %d", [event keyCode]);
+                        NSLog(@"Unhandled key: %d", [event keyCode]);
                     } break;
                 }
             } break;
@@ -624,16 +658,19 @@ static NSWindow *cocoaCreateWindowAndMenu(
     NSApplication *application,
     int width, int height
 ) {
-    int windowStyleMask = NSClosableWindowMask
-                        | NSMiniaturizableWindowMask
-                        | NSTitledWindowMask
-                        | NSResizableWindowMask;
-    NSRect windowRect = NSMakeRect(0, 0, width, height);
+    int windowStyleMask;
+    NSRect windowRect;
+    windowRect = NSMakeRect(0, 0, width, height);
+    windowStyleMask = NSClosableWindowMask
+                    | NSMiniaturizableWindowMask
+                    | NSTitledWindowMask
+                    | NSResizableWindowMask;
     NSWindow *window =
         [[NSWindow alloc] initWithContentRect: windowRect
                           styleMask: windowStyleMask
                           backing: NSBackingStoreBuffered
-                          defer: NO];
+                          defer: YES];
+    [window setOpaque: YES];
     [window center];
     WindowDelegate *windowDelegate = [[WindowDelegate alloc] init];
     [window setDelegate: windowDelegate];
@@ -655,8 +692,6 @@ static NSWindow *cocoaCreateWindowAndMenu(
     // When running from console we need to manually steal focus
     // from the terminal window for some reason.
     [application activateIgnoringOtherApps:YES];
-    // A cryptic way to ask window to open.
-    [window makeKeyAndOrderFront: application];
     return window;
 }
 
@@ -1191,6 +1226,9 @@ int main() {
     NSApplication *application = cocoaInitApplication();
     NSWindow *window = cocoaCreateWindowAndMenu(
         application, initialWindowWidth, initialWindowHeight);
+    cocoaSetWindowFullscreen(window, LAUNCH_FULLSCREEN);
+    // A cryptic way to ask window to open.
+    [window makeKeyAndOrderFront: application];
     OpenglState openglState = {0};
     openglInitState(&openglState, window, framebufferWidth, framebufferHeight);
     // Initialize audio output.
@@ -1214,7 +1252,7 @@ int main() {
             game = osxLoadGameCode(gameDylibFullPath);
         }
 #endif
-        cocoaFlushEvents(application, keyboardController, &inputPlayback);
+        cocoaProcessEvents(application, window, keyboardController, &inputPlayback);
         if (!globalApplicationState.onPause) {
             if (!loopsToSkip) {
                 input.dtForFrame = timeDeltaSeconds;
