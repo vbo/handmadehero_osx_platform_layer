@@ -68,6 +68,11 @@ static int stringLength(char *string) {
     return count;
 }
 
+#define KILOBYTES(Value) ((Value)*1024LL)
+#define MEGABYTES(Value) (KILOBYTES(Value)*1024LL)
+#define GIGABYTES(Value) (MEGABYTES(Value)*1024LL)
+#define TERABYTES(Value) (GIGABYTES(Value)*1024LL)
+
 // Timing
 // ======
 
@@ -77,25 +82,42 @@ static int stringLength(char *string) {
 // This function returns time in some CPU-dependent units, so we
 // need to obtain and cache a coefficient to convert it to something usable.
 
-static uint64_t hrtimeStart;
-static double hrtimeCoeff; // From mach units to seconds
+typedef uint64_t hrtime_t;
+
+static hrtime_t hrtimeStartAbs;
+static mach_timebase_info_data_t hrtimeInfo;
+static const uint64_t NANOS_PER_USEC = 1000ULL;
+static const uint64_t NANOS_PER_MILLISEC = 1000ULL * NANOS_PER_USEC;
+static const uint64_t NANOS_PER_SEC = 1000ULL * NANOS_PER_MILLISEC;
 
 // This should be called once before using any timing functions!
 // Check out Apple's "Technical Q&A QA1398 Mach Absolute Time Units"
-// for official recommmendations.
+// for official recommendations.
 static void osxInitHrtime() {
-    hrtimeStart = mach_absolute_time();
-    mach_timebase_info_data_t timeBase;
-    mach_timebase_info(&timeBase);
-    hrtimeCoeff = (double)timeBase.numer
-                / (double)timeBase.denom
-                / 1000000.0 // Nanoseconds in 1 millisecond.
-                / 1000;     // Milliseconds in 1 second
+    hrtimeStartAbs = mach_absolute_time();
+    mach_timebase_info(&hrtimeInfo);
 }
 
 // Monotonic time in seconds with fraction.
-static double osxHRTime() {
-   return (mach_absolute_time() - hrtimeStart) * hrtimeCoeff; 
+static hrtime_t osxHRTime() {
+   return mach_absolute_time() - hrtimeStartAbs; 
+}
+
+static double osxHRTimeDeltaSeconds(hrtime_t past, hrtime_t future) {
+    double delta = (double)(future - past)
+                 / (double)NANOS_PER_SEC
+                 * (double)hrtimeInfo.numer
+                 / (double)hrtimeInfo.denom;
+    return delta;
+}
+
+static void osxHRWaitUntilAbsPlusSeconds(hrtime_t baseTime, double seconds) {
+    uint64_t timeToWaitAbs = seconds
+                           / (double)hrtimeInfo.numer
+                           * (double)NANOS_PER_SEC
+                           * (double)hrtimeInfo.denom;
+    uint64_t nowAbs = mach_absolute_time();
+    mach_wait_until(nowAbs + timeToWaitAbs);
 }
 
 // Utility File/Path functions
@@ -1103,9 +1125,9 @@ int main() {
     // Allocate game memory.
     game_memory gameMemory = {0}; {
         gameMemory.IsInitialized = 0;
-        gameMemory.PermanentStorageSize = 64*1024*1024; // 64Mb
-        gameMemory.TransientStorageSize = 1*1024*1024*1024; // 1Gb
-        int64_t startAddress = 2*1024*1024*1024*1024; // 2Tb
+        gameMemory.PermanentStorageSize = MEGABYTES(64);
+        gameMemory.TransientStorageSize = GIGABYTES(1);
+        int64_t startAddress = TERABYTES(2);
         globalApplicationState.gameMemoryBlockSize =
             gameMemory.PermanentStorageSize + gameMemory.TransientStorageSize;
         globalApplicationState.gameMemoryBlock = osxMemoryAllocate(
@@ -1173,9 +1195,9 @@ int main() {
     OSXInputPlaybackState inputPlayback;
     osxInitInputPlayback(&inputPlayback);
     // Start main loop.
-    double timeNow;
-    double timeDelta;
-    double timeLast = osxHRTime();
+    hrtime_t timeNow;
+    double timeDeltaSeconds = 0;
+    hrtime_t timeLast = osxHRTime();
     // For some reason several first iterations
     // are a bit slow so let's just skip them.
     int loopsToSkip = 3;
@@ -1190,7 +1212,7 @@ int main() {
         cocoaFlushEvents(application, keyboardController, &inputPlayback);
         if (!globalApplicationState.onPause) {
             if (!loopsToSkip) {
-                input.dtForFrame = timeDelta;
+                input.dtForFrame = timeDeltaSeconds;
                 if (inputPlayback.recordIndex) {
                     osxRecordInput(&inputPlayback, &input);
                 }
@@ -1205,7 +1227,7 @@ int main() {
                     soundOutputState.runningSampleIndex = writeCursor;
                     soundOutputState.isValid = true;
                 }
-                uint32_t soundSamplesToRequest = timeDelta * soundSamplesPerSecond;
+                uint32_t soundSamplesToRequest = timeDeltaSeconds * soundSamplesPerSecond;
                 if (soundSamplesToRequest > soundOutputState.bufferSizeInSamples) {
                     soundSamplesToRequest = soundOutputState.bufferSizeInSamples;
                 }
@@ -1221,14 +1243,17 @@ int main() {
         // Sleep until the frame boundary.
         // This allows us to use whatever target framerate we want
         // and be independent of vSync.
-        // TODO: improve sleep timing
         while (true) {
             timeNow = osxHRTime();
-            timeDelta = timeNow - timeLast;
-            double timeToFrame = targetFrameTime - timeDelta;
-            // TODO: are we always sleeping once?
-            if (timeToFrame > 1) {
-                usleep(((int)timeToFrame) * 1000);
+            timeDeltaSeconds = osxHRTimeDeltaSeconds(timeLast, timeNow);
+            double timeToFrame = targetFrameTime - timeDeltaSeconds;
+            // We can't sleep precise enough. According to Apple sleep
+            // may vary by +500usec sometimes. So:
+            // 1) We sleep at all only if we need to wait for more than 2ms
+            // 2) We sleep for 1ms less then we need and busy-wait the rest
+            if (timeToFrame > 0.002) {
+                double timeToSleep = timeToFrame - 0.001;
+                osxHRWaitUntilAbsPlusSeconds(timeNow, timeToSleep);
             }
             if (timeToFrame <= 0) {
                 break;
@@ -1236,7 +1261,7 @@ int main() {
         }
         // Update timer
         timeNow = osxHRTime();
-        timeDelta = timeNow - timeLast;
+        timeDeltaSeconds = osxHRTimeDeltaSeconds(timeLast, timeNow);
         timeLast = timeNow;
     }
     return EXIT_SUCCESS;
