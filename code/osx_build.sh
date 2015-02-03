@@ -17,5 +17,5 @@ clang \
     -Wall -Werror -Wfatal-errors -pedantic \
     -Wno-c11-extensions -Wno-unused-variable -Wno-unused-function \
     -DHANDMADE_INTERNAL=1 \
-    -framework Cocoa -framework OpenGL -framework CoreAudio -framework AudioUnit -framework IOKit \
+    -framework Cocoa -framework OpenGL -framework AudioUnit -framework IOKit \
     -o ../build/osx_handmade.out
