@@ -80,7 +80,8 @@ static int stringLength(char *string) {
 
 // I am using mach_absolute_time() to implement a high-resolution timer.
 // This function returns time in some CPU-dependent units, so we
-// need to obtain and cache a coefficient to convert it to something usable.
+// need to obtain and cache a coefficient info to convert it to something usable.
+// TODO: maybe use seconds only to talk with game and use usec for calculations?
 
 typedef uint64_t hrtime_t;
 
@@ -98,19 +99,23 @@ static void osxInitHrtime() {
     mach_timebase_info(&hrtimeInfo);
 }
 
-// Monotonic time in seconds with fraction.
+// Monotonic time in CPU-dependent units.
 static hrtime_t osxHRTime() {
    return mach_absolute_time() - hrtimeStartAbs; 
 }
 
+// Delta in seconds between two time values in CPU-dependent units.
 static double osxHRTimeDeltaSeconds(hrtime_t past, hrtime_t future) {
     double delta = (double)(future - past)
-                 / (double)NANOS_PER_SEC
                  * (double)hrtimeInfo.numer
+                 / (double)NANOS_PER_SEC
                  / (double)hrtimeInfo.denom;
     return delta;
 }
 
+// High-resolution sleep until moment specified by value
+// in CPU-dependent units and offset in seconds.
+// According to Apple docs this should be in at least 500usec precision.
 static void osxHRWaitUntilAbsPlusSeconds(hrtime_t baseTime, double seconds) {
     uint64_t timeToWaitAbs = seconds
                            / (double)hrtimeInfo.numer
