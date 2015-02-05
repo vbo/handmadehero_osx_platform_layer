@@ -27,15 +27,17 @@
 #define DEBUG_TURN_OVERLAY_ON_UNFOCUS 0
 #define DEBUG_OVERLAY_OPACITY 0.5
 #define LAUNCH_FULLSCREEN 0
+#define FPS_MODE_LOW 0
+#define FPS_MODE_HIGH 1
+#define FPS_MODE_INITIAL FPS_MODE_LOW
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #undef internal
 
-static const int framebufferWidth = 1920/2;
-static const int framebufferHeight = 1080/2;
-static const int initialWindowWidth = framebufferWidth;
-static const int initialWindowHeight = framebufferHeight;
-static const int targetFPS = 30;
-static const double targetFrameTime = (double)1.0/(double)targetFPS;
+static const uint32_t framebufferWidth = 1920/2;
+static const uint32_t framebufferHeight = 1080/2;
+static const uint32_t initialWindowWidth = framebufferWidth;
+static const uint32_t initialWindowHeight = framebufferHeight;
+static const uint32_t fpsModes[] = {30, 60};
 
 // We'll initialize this on top of main() function.
 static struct {
@@ -107,7 +109,7 @@ static hrtime_t osxHRTime() {
 }
 
 // Delta in seconds between two time values in CPU-dependent units.
-static double osxHRTimeDeltaSeconds(hrtime_t past, hrtime_t future) {
+static inline double osxHRTimeDeltaSeconds(hrtime_t past, hrtime_t future) {
     double delta = (double)(future - past)
                  * (double)hrtimeInfo.numer
                  / (double)NANOS_PER_SEC
@@ -118,13 +120,33 @@ static double osxHRTimeDeltaSeconds(hrtime_t past, hrtime_t future) {
 // High-resolution sleep until moment specified by value
 // in CPU-dependent units and offset in seconds.
 // According to Apple docs this should be in at least 500usec precision.
-static void osxHRWaitUntilAbsPlusSeconds(hrtime_t baseTime, double seconds) {
+static inline void osxHRSleepUntilAbsPlusSeconds(hrtime_t baseTime, double seconds) {
     uint64_t timeToWaitAbs = seconds
                            / (double)hrtimeInfo.numer
                            * (double)NANOS_PER_SEC
                            * (double)hrtimeInfo.denom;
     uint64_t nowAbs = mach_absolute_time();
     mach_wait_until(nowAbs + timeToWaitAbs);
+}
+
+// Combines HRSleep with busy waiting for even more precise sleep.
+static inline void osxHRWaitUntilAbsPlusSeconds(hrtime_t baseTime, double seconds) {
+    while (1) {
+        hrtime_t timeNow = osxHRTime();
+        double timeSinceBase = osxHRTimeDeltaSeconds(baseTime, timeNow);
+        double waitRemainder = seconds - timeSinceBase;
+        // We can't sleep precise enough. According to Apple sleep
+        // may vary by +500usec sometimes. So:
+        // 1) We sleep at all only if we need to wait for more than 2ms
+        // 2) We sleep for 1ms less then we need and busy-wait the rest
+        if (waitRemainder > 0.002) {
+            double timeToSleep = waitRemainder - 0.001;
+            osxHRSleepUntilAbsPlusSeconds(timeNow, timeToSleep);
+        }
+        if (waitRemainder < 0.0001) {
+            break;
+        }
+    }
 }
 
 // Utility File/Path functions
@@ -1002,7 +1024,7 @@ static void openglInitState(
         0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
 }
 
-static void openglUpdateFramebufferAndFlush(OpenglState *state, void *framebufferMemory) {
+static void openglUpdateFramebuffer(OpenglState *state, void *framebufferMemory) {
     glClear(GL_COLOR_BUFFER_BIT);
     // Upload new video frame to the GPU.
     glTexSubImage2D(
@@ -1016,6 +1038,9 @@ static void openglUpdateFramebufferAndFlush(OpenglState *state, void *framebuffe
         glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f,  1.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f,  1.0f);
     } glEnd();
+}
+
+static void openglFlushBuffer(OpenglState *state) {
     // Swap OpenGL buffers. With vSync enabled this
     // will always block us until refresh boundary.
     [state->context flushBuffer];
@@ -1233,6 +1258,10 @@ int main() {
     // Initialize input playback
     OSXInputPlaybackState inputPlayback;
     osxInitInputPlayback(&inputPlayback);
+
+    uint32_t fpsMode = FPS_MODE_INITIAL;
+    uint32_t targetFPS = fpsModes[fpsMode];
+    double targetFrameTime = (double)1.0/(double)targetFPS;
     // Start main loop.
     hrtime_t timeNow;
     double timeDeltaSeconds = 0;
@@ -1274,29 +1303,23 @@ int main() {
                 game.getSoundSamples(&threadContext, &gameMemory, &gameSoundBuffer);
                 coreAudioCopySamplesToRingBuffer(
                     &soundOutputState, &gameSoundBuffer, soundSamplesToRequest);
-                openglUpdateFramebufferAndFlush(&openglState, framebuffer.Memory);
+                openglUpdateFramebuffer(&openglState, framebuffer.Memory);
+                if (fpsMode != FPS_MODE_HIGH) {
+                    // Wait until the target frame boundary minus some safety margin
+                    // to not oversleep the beginning of next refresh.
+                    // TODO: maybe for low-end machines we need greater safety margin?
+                    osxHRWaitUntilAbsPlusSeconds(timeLast, targetFrameTime - 0.001);
+                }
             } else {
                 loopsToSkip--;
             }
+            openglFlushBuffer(&openglState);
         }
-        // Sleep until the frame boundary.
-        // This allows us to use whatever target framerate we want
-        // and be independent of vSync.
-        while (true) {
-            timeNow = osxHRTime();
-            timeDeltaSeconds = osxHRTimeDeltaSeconds(timeLast, timeNow);
-            double timeToFrame = targetFrameTime - timeDeltaSeconds;
-            // We can't sleep precise enough. According to Apple sleep
-            // may vary by +500usec sometimes. So:
-            // 1) We sleep at all only if we need to wait for more than 2ms
-            // 2) We sleep for 1ms less then we need and busy-wait the rest
-            if (timeToFrame > 0.002) {
-                double timeToSleep = timeToFrame - 0.001;
-                osxHRWaitUntilAbsPlusSeconds(timeNow, timeToSleep);
-            }
-            if (timeToFrame <= 0) {
-                break;
-            }
+        // For framerates lower than refresh rate we
+        // need to manually stabilize our frame times
+        // to make animation smoother.
+        if (fpsMode != FPS_MODE_HIGH) {
+            osxHRWaitUntilAbsPlusSeconds(timeLast, targetFrameTime);
         }
         // Update timer
         timeNow = osxHRTime();
