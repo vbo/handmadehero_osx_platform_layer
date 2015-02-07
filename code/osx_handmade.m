@@ -27,6 +27,7 @@
 #define DEBUG_TURN_OVERLAY_ON_UNFOCUS 0
 #define DEBUG_OVERLAY_OPACITY 0.5
 #define LAUNCH_FULLSCREEN 0
+#define ENABLE_VSYNC 1
 #define FPS_MODE_LOW 0
 #define FPS_MODE_HIGH 1
 #define FPS_MODE_INITIAL FPS_MODE_LOW
@@ -945,6 +946,14 @@ typedef struct {
     int framebufferHeight;
 } OpenglState;
 
+
+@interface OpenGLView: NSOpenGLView @end
+@implementation OpenGLView : NSOpenGLView
+    - (void)reshape {
+        glViewport(0, 0, framebufferWidth, framebufferHeight);
+    }
+@end
+
 // Creates OpenGL context and initializes a drawing surface.
 static NSOpenGLContext *openglCreateContext(NSWindow *window) {
     NSOpenGLContext *openglContext;
@@ -978,13 +987,22 @@ static NSOpenGLContext *openglCreateContext(NSWindow *window) {
     // and don't think about it to much.
     [openglContext makeCurrentContext];
     // Enable vSync.
-    GLint vsync = 1;
+    GLint vsync = ENABLE_VSYNC;
     [openglContext setValues: &vsync
                    forParameter: NSOpenGLCPSwapInterval];
+    // Explicitly set back buffer resolution.
+    // Without it back buffer will be automatically resized with window
+    // so in fullscreen we'll be actually drawing to 1280x800 or something
+    // regardless of our target resolution.
+    // TODO: what to do with game vs screen aspect ratio?
+    // If we actually change video mode this would be handled automagically
+    // but looks like it's anti-pattern in OS X world.
+    GLint dims[] = {framebufferWidth, framebufferHeight};
+    CGLSetParameter(openglContext.CGLContextObj, kCGLCPSurfaceBackingSize, dims);
+    CGLEnable(openglContext.CGLContextObj, kCGLCESurfaceBackingSize);
     // Substitute window's default contentView with OpenGL view
     // and configure it to use our newly created OpenGL context.
-    NSOpenGLView *view = [[NSOpenGLView alloc] init];
-    [view setWantsBestResolutionOpenGLSurface: YES];
+    OpenGLView *view = [[OpenGLView alloc] init];
     [window setContentView: view];
     [view setOpenGLContext: openglContext];
     [view setPixelFormat: pixelFormat];
@@ -1261,6 +1279,7 @@ int main() {
 
     uint32_t fpsMode = FPS_MODE_INITIAL;
     uint32_t targetFPS = fpsModes[fpsMode];
+    int sleepSync = !ENABLE_VSYNC || (fpsMode == FPS_MODE_LOW);
     double targetFrameTime = (double)1.0/(double)targetFPS;
     // Start main loop.
     hrtime_t timeNow;
@@ -1304,7 +1323,7 @@ int main() {
                 coreAudioCopySamplesToRingBuffer(
                     &soundOutputState, &gameSoundBuffer, soundSamplesToRequest);
                 openglUpdateFramebuffer(&openglState, framebuffer.Memory);
-                if (fpsMode != FPS_MODE_HIGH) {
+                if (sleepSync) {
                     // Wait until the target frame boundary minus some safety margin
                     // to not oversleep the beginning of next refresh.
                     // TODO: maybe for low-end machines we need greater safety margin?
@@ -1318,7 +1337,7 @@ int main() {
         // For framerates lower than refresh rate we
         // need to manually stabilize our frame times
         // to make animation smoother.
-        if (fpsMode != FPS_MODE_HIGH) {
+        if (sleepSync) {
             osxHRWaitUntilAbsPlusSeconds(timeLast, targetFrameTime);
         }
         // Update timer
